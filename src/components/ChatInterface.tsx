@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader2, MessageCircle, AlertCircle } from 'lucide-react';
+import { Send, Bot, User, MessageCircle, AlertCircle } from 'lucide-react';
 
 interface Message {
   id: number;
@@ -41,6 +41,24 @@ const ChatInterface: React.FC = () => {
     }
   }, [inputMessage]);
 
+  // Componente de indicador de escritura tipo Telegram
+  const TypingIndicator = () => (
+    <div className="flex items-start space-x-3">
+      <div className="bg-gradient-to-r from-blue-500 to-indigo-600 p-2 rounded-full">
+        <Bot className="h-4 w-4 text-white" />
+      </div>
+      <div className="bg-white shadow-sm border border-gray-200 px-4 py-3 rounded-2xl">
+        <div className="flex items-center space-x-1">
+          <div className="flex space-x-1">
+            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0ms'}}></div>
+            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '150ms'}}></div>
+            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '300ms'}}></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   const sendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return;
 
@@ -57,7 +75,7 @@ const ChatInterface: React.FC = () => {
     setError(null);
 
     try {
-      const webhookUrl = 'https://n8n-n8n.e2gone.easypanel.host/webhook-test/78fce57c-3748-4bae-be89-ba94e4962a2c';
+      const webhookUrl = 'https://n8n-n8n.e2gone.easypanel.host/webhook/78fce57c-3748-4bae-be89-ba94e4962a2c';
       
       const response = await fetch(webhookUrl, {
         method: 'POST',
@@ -83,6 +101,7 @@ const ChatInterface: React.FC = () => {
         data = { output: textResponse };
       }
       
+      // Extraer la respuesta del AI
       let aiResponse = '';
       if (typeof data === 'string') {
         aiResponse = data;
@@ -95,28 +114,46 @@ const ChatInterface: React.FC = () => {
       } else if (data.text) {
         aiResponse = data.text;
       } else {
-        aiResponse = 'Respuesta recibida correctamente, pero en formato no esperado.';
-        console.log('Estructura de respuesta:', data);
+        // Si no encontramos la respuesta en el formato esperado, revisamos toda la estructura
+        console.log('Estructura de respuesta completa:', data);
+        aiResponse = 'He recibido tu mensaje correctamente. ¿Podrías reformular tu pregunta?';
       }
 
-      const aiMessage: Message = {
-        id: Date.now() + 1,
-        type: 'ai',
-        content: aiResponse,
-        timestamp: new Date()
-      };
+      // Filtrar mensajes de sistema como "Workflow was started"
+      if (aiResponse && 
+          !aiResponse.toLowerCase().includes('workflow was started') && 
+          !aiResponse.toLowerCase().includes('workflow has been') &&
+          aiResponse.trim() !== '') {
+        
+        const aiMessage: Message = {
+          id: Date.now() + 1,
+          type: 'ai',
+          content: aiResponse,
+          timestamp: new Date()
+        };
 
-      setMessages(prev => [...prev, aiMessage]);
+        setMessages(prev => [...prev, aiMessage]);
+      } else {
+        // Si no hay respuesta válida, mostrar mensaje de error amigable
+        const fallbackMessage: Message = {
+          id: Date.now() + 1,
+          type: 'ai',
+          content: 'Disculpa, parece que hubo un problema procesando tu mensaje. ¿Podrías intentar de nuevo?',
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, fallbackMessage]);
+      }
+
     } catch (error) {
       console.error('Error sending message:', error);
       const errorMessage: Message = {
         id: Date.now() + 1,
         type: 'ai',
-        content: `Error: ${error instanceof Error ? error.message : 'Error desconocido al procesar tu mensaje'}. Por favor, verifica la configuración del webhook.`,
+        content: `No pude conectar con el servidor. Por favor, intenta de nuevo en unos momentos.`,
         timestamp: new Date()
       };
       setMessages(prev => [...prev, errorMessage]);
-      setError(error instanceof Error ? error.message : 'Error desconocido');
+      setError(error instanceof Error ? error.message : 'Error de conexión');
     } finally {
       setIsLoading(false);
     }
@@ -178,18 +215,12 @@ const ChatInterface: React.FC = () => {
               className={`max-w-xs md:max-w-md lg:max-w-lg xl:max-w-xl px-4 py-2 rounded-2xl ${
                 message.type === 'user'
                   ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white'
-                  : message.content.startsWith('Error:')
-                  ? 'bg-red-50 border border-red-200 text-red-800'
                   : 'bg-white shadow-sm border border-gray-200 text-gray-800'
               }`}
             >
               <p className="text-sm whitespace-pre-wrap">{message.content}</p>
               <p className={`text-xs mt-1 ${
-                message.type === 'user' 
-                  ? 'text-blue-100' 
-                  : message.content.startsWith('Error:')
-                  ? 'text-red-500'
-                  : 'text-gray-500'
+                message.type === 'user' ? 'text-blue-100' : 'text-gray-500'
               }`}>
                 {formatTime(message.timestamp)}
               </p>
@@ -203,24 +234,13 @@ const ChatInterface: React.FC = () => {
           </div>
         ))}
         
-        {isLoading && (
-          <div className="flex items-start space-x-3">
-            <div className="bg-gradient-to-r from-blue-500 to-indigo-600 p-2 rounded-full">
-              <Bot className="h-4 w-4 text-white" />
-            </div>
-            <div className="bg-white shadow-sm border border-gray-200 px-4 py-2 rounded-2xl">
-              <div className="flex items-center space-x-2">
-                <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-                <p className="text-sm text-gray-600">Escribiendo...</p>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Indicador de escritura tipo Telegram */}
+        {isLoading && <TypingIndicator />}
         
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area */}
+      {/* Input Area - Texto visible */}
       <div className="bg-white border-t border-gray-200 p-4">
         <div className="flex space-x-3">
           <textarea
@@ -229,12 +249,13 @@ const ChatInterface: React.FC = () => {
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder="Escribe tu mensaje aquí..."
-            className="flex-1 resize-none border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="flex-1 resize-none border border-gray-300 rounded-2xl px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
             rows={1}
             disabled={isLoading}
             style={{
               minHeight: '44px',
-              maxHeight: '120px'
+              maxHeight: '120px',
+              color: '#1f2937' // Forzar color del texto
             }}
           />
           <button
@@ -242,11 +263,7 @@ const ChatInterface: React.FC = () => {
             disabled={!inputMessage.trim() || isLoading}
             className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-4 py-3 rounded-2xl hover:from-blue-600 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
           >
-            {isLoading ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Send className="h-5 w-5" />
-            )}
+            <Send className="h-5 w-5" />
           </button>
         </div>
         
