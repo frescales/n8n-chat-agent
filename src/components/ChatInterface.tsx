@@ -1,13 +1,45 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, MessageCircle, AlertCircle } from 'lucide-react';
+import { Send, Bot, User, MessageCircle, AlertCircle, BarChart3 } from 'lucide-react';
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, LineElement, PointElement, ArcElement } from 'chart.js';
+import { Bar, Line, Pie } from 'react-chartjs-2';
+
+// Registrar componentes de Chart.js
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  LineElement,
+  PointElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend
+);
+
+interface ChartData {
+  type: 'chart';
+  chartType: 'bar' | 'line' | 'pie';
+  title?: string;
+  data: {
+    labels: string[];
+    datasets: Array<{
+      label: string;
+      data: number[];
+      backgroundColor?: string | string[];
+      borderColor?: string | string[];
+      borderWidth?: number;
+    }>;
+  };
+}
 
 interface Message {
   id: number;
   type: 'user' | 'ai';
-  content: string;
+  content: string | ChartData;
   timestamp: Date;
+  isChart?: boolean;
 }
 
 const ChatInterface: React.FC = () => {
@@ -15,7 +47,7 @@ const ChatInterface: React.FC = () => {
     {
       id: 1,
       type: 'ai',
-      content: '¡Hola! Soy tu asistente de IA. ¿En qué puedo ayudarte hoy?',
+      content: '¡Hola! Soy tu asistente de IA. ¿En qué puedo ayudarte hoy? Puedo generar gráficos si necesitas visualizar datos.',
       timestamp: new Date()
     }
   ]);
@@ -58,6 +90,60 @@ const ChatInterface: React.FC = () => {
       </div>
     </div>
   );
+
+  // Componente para renderizar gráficos
+  const ChartComponent = ({ chartData }: { chartData: ChartData }) => {
+    const options = {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'top' as const,
+        },
+        title: {
+          display: !!chartData.title,
+          text: chartData.title || '',
+        },
+      },
+    };
+
+    const containerClass = "w-full h-64 bg-white p-4 rounded-lg border border-gray-200";
+
+    switch (chartData.chartType) {
+      case 'bar':
+        return (
+          <div className={containerClass}>
+            <Bar data={chartData.data} options={options} />
+          </div>
+        );
+      case 'line':
+        return (
+          <div className={containerClass}>
+            <Line data={chartData.data} options={options} />
+          </div>
+        );
+      case 'pie':
+        return (
+          <div className={containerClass}>
+            <Pie data={chartData.data} options={options} />
+          </div>
+        );
+      default:
+        return <div className="text-red-500">Tipo de gráfico no soportado</div>;
+    }
+  };
+
+  const parseResponse = (response: string): { content: string | ChartData; isChart: boolean } => {
+    try {
+      const parsed = JSON.parse(response);
+      if (parsed.type === 'chart' && parsed.chartType && parsed.data) {
+        return { content: parsed as ChartData, isChart: true };
+      }
+    } catch (e) {
+      // Si no es JSON válido, tratarlo como texto normal
+    }
+    return { content: response, isChart: false };
+  };
 
   const sendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return;
@@ -114,27 +200,29 @@ const ChatInterface: React.FC = () => {
       } else if (data.text) {
         aiResponse = data.text;
       } else {
-        // Si no encontramos la respuesta en el formato esperado, revisamos toda la estructura
         console.log('Estructura de respuesta completa:', data);
         aiResponse = 'He recibido tu mensaje correctamente. ¿Podrías reformular tu pregunta?';
       }
 
-      // Filtrar mensajes de sistema como "Workflow was started"
+      // Filtrar mensajes de sistema y procesar respuesta
       if (aiResponse && 
           !aiResponse.toLowerCase().includes('workflow was started') && 
           !aiResponse.toLowerCase().includes('workflow has been') &&
           aiResponse.trim() !== '') {
         
+        // Intentar parsear como gráfico o texto
+        const { content, isChart } = parseResponse(aiResponse);
+        
         const aiMessage: Message = {
           id: Date.now() + 1,
           type: 'ai',
-          content: aiResponse,
-          timestamp: new Date()
+          content: content,
+          timestamp: new Date(),
+          isChart: isChart
         };
 
         setMessages(prev => [...prev, aiMessage]);
       } else {
-        // Si no hay respuesta válida, mostrar mensaje de error amigable
         const fallbackMessage: Message = {
           id: Date.now() + 1,
           type: 'ai',
@@ -184,7 +272,7 @@ const ChatInterface: React.FC = () => {
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-800">Asistente IA</h1>
-              <p className="text-sm text-gray-600">Powered by n8n & Claude</p>
+              <p className="text-sm text-gray-600">Powered by n8n & Claude + Charts</p>
             </div>
           </div>
           {error && (
@@ -207,23 +295,40 @@ const ChatInterface: React.FC = () => {
           >
             {message.type === 'ai' && (
               <div className="bg-gradient-to-r from-blue-500 to-indigo-600 p-2 rounded-full flex-shrink-0">
-                <Bot className="h-4 w-4 text-white" />
+                {message.isChart ? (
+                  <BarChart3 className="h-4 w-4 text-white" />
+                ) : (
+                  <Bot className="h-4 w-4 text-white" />
+                )}
               </div>
             )}
             
             <div
-              className={`max-w-xs md:max-w-md lg:max-w-lg xl:max-w-xl px-4 py-2 rounded-2xl ${
+              className={`${
                 message.type === 'user'
-                  ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white'
-                  : 'bg-white shadow-sm border border-gray-200 text-gray-800'
+                  ? 'max-w-xs md:max-w-md lg:max-w-lg xl:max-w-xl bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-4 py-2 rounded-2xl'
+                  : message.isChart
+                  ? 'max-w-xs md:max-w-md lg:max-w-lg xl:max-w-2xl'
+                  : 'max-w-xs md:max-w-md lg:max-w-lg xl:max-w-xl bg-white shadow-sm border border-gray-200 text-gray-800 px-4 py-2 rounded-2xl'
               }`}
             >
-              <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-              <p className={`text-xs mt-1 ${
-                message.type === 'user' ? 'text-blue-100' : 'text-gray-500'
-              }`}>
-                {formatTime(message.timestamp)}
-              </p>
+              {message.isChart && typeof message.content === 'object' ? (
+                <div className="space-y-2">
+                  <ChartComponent chartData={message.content as ChartData} />
+                  <p className="text-xs text-gray-500 mt-2 px-2">
+                    {formatTime(message.timestamp)}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm whitespace-pre-wrap">{message.content as string}</p>
+                  <p className={`text-xs mt-1 ${
+                    message.type === 'user' ? 'text-blue-100' : 'text-gray-500'
+                  }`}>
+                    {formatTime(message.timestamp)}
+                  </p>
+                </>
+              )}
             </div>
 
             {message.type === 'user' && (
@@ -240,7 +345,7 @@ const ChatInterface: React.FC = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area - Texto visible */}
+      {/* Input Area */}
       <div className="bg-white border-t border-gray-200 p-4">
         <div className="flex space-x-3">
           <textarea
@@ -248,14 +353,14 @@ const ChatInterface: React.FC = () => {
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="Escribe tu mensaje aquí..."
+            placeholder="Escribe tu mensaje aquí... (Ej: 'Muestra un gráfico de ventas mensuales')"
             className="flex-1 resize-none border border-gray-300 rounded-2xl px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
             rows={1}
             disabled={isLoading}
             style={{
               minHeight: '44px',
               maxHeight: '120px',
-              color: '#1f2937' // Forzar color del texto
+              color: '#1f2937'
             }}
           />
           <button
