@@ -161,7 +161,7 @@ const ChatInterface: React.FC = () => {
     setError(null);
 
     try {
-      const webhookUrl = 'https://n8n-n8n.e2gone.easypanel.host/webhook/78fce57c-3748-4bae-be89-ba94e4962a2c';
+      const webhookUrl = 'https://n8n-n8n.e2gone.easypanel.host/webhook-test/78fce57c-3748-4bae-be89-ba94e4962a2c';
       
       const response = await fetch(webhookUrl, {
         method: 'POST',
